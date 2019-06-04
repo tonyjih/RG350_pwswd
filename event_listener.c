@@ -403,8 +403,9 @@ int do_listen(const char *event, const char *uinput)
 				}
 				continue;
 			}
-			else
+			else if (!power_button_pressed)
 			{
+				
 				if (my_event.code == EVENT_SWITCH_VOLUP) {
 					execute(volup, my_event.value);
 					
