@@ -6,13 +6,14 @@
 
 #include "bright_backend.h"
 
-#define SYSFS_DIR "/sys/devices/platform/board/board:backlight/backlight/board:backlight"
-#define BRIGHT_FILENAME SYSFS_DIR "/brightness"
-#define MAX_BRIGHT_FILENAME SYSFS_DIR "/max_brightness"
+#define BRIGHT_FILENAME "/sys/class/backlight/pwm-backlight/brightness"
+#define MAX_BRIGHT_FILENAME "/sys/class/backlight/pwm-backlight/max_brightness"
 #define BLANKING_FILENAME "/sys/class/graphics/fb0/blank"
 
-#define MIN_BRIGHTNESS 1
-#define STEP_VALUE 1
+#ifndef MIN_BRIGHTNESS
+#define MIN_BRIGHTNESS 10
+#endif
+#define STEP_VALUE 10
 
 static int max_brightness = -1;
 static int current_value = -1;
