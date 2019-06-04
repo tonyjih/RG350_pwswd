@@ -403,6 +403,17 @@ int do_listen(const char *event, const char *uinput)
 				}
 				continue;
 			}
+			else
+			{
+				if (my_event.code == EVENT_SWITCH_VOLUP) {
+					execute(volup, my_event.value);
+					
+				}
+				if (my_event.code == EVENT_SWITCH_VOLDOWN) {
+					execute(voldown, my_event.value);
+				}
+				
+			}
 
 
 			// If the power button is currently pressed, we enable shortcuts.

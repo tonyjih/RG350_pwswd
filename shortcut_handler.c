@@ -27,6 +27,9 @@ struct button buttons[] = {
 	_BUTTON(SELECT),
 	_BUTTON(START),
 	_BUTTON(HOLD),
+	_BUTTON(VOLUP),
+	_BUTTON(VOLDOWN),
+	
 };
 
 unsigned int nb_buttons = sizeof(buttons) / sizeof(buttons[0]);
