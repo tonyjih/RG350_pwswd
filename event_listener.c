@@ -25,24 +25,6 @@
 #define DEAD_ZONE		300
 #define AXIS_ZERO		1620
 
-#define JOYSTICK_MIN_X1		2000
-#define JOYSTICK_MIN_Y1		2000
-#define JOYSTICK_MIN_X2		900
-#define JOYSTICK_MIN_Y2		900
-
-#define JOYSTICK_MAX_X1		1300
-#define JOYSTICK_MAX_Y1		1300
-#define JOYSTICK_MAX_X2		2400
-#define JOYSTICK_MAX_Y2		2400
-#define JOYSTICK_NOISE_X1	4
-#define JOYSTICK_NOISE_Y1	4
-#define JOYSTICK_NOISE_X2	4
-#define JOYSTICK_NOISE_Y2	4
-#define JOYSTICK_FLAT_X1	200
-#define JOYSTICK_FLAT_Y1	200
-#define JOYSTICK_FLAT_X2	200
-#define JOYSTICK_FLAT_Y2	200
-
 #if (POWEROFF_TIMEOUT > 0)
 #include <pthread.h>
 #include <stdlib.h>
