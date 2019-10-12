@@ -18,6 +18,10 @@
 #define EVENT_FILENAME  "/dev/input/event0"
 #endif
 
+#ifndef JEVENT_FILENAME
+#define JEVENT_FILENAME  "/dev/input/event3"
+#endif
+
 #ifndef UINPUT_FILENAME
 #define UINPUT_FILENAME "/dev/uinput"
 #endif
@@ -41,7 +45,7 @@ int main(int argc, char **argv)
 #ifdef BACKEND_VOLUME
 		  *mixer = NULL, *dac = NULL,
 #endif
-		  *event = NULL, *uinput = NULL;
+		  *event = NULL, *uinput = NULL, *jevent = NULL;
 	int exitcode = EXIT_SUCCESS;
 	size_t i;
 
@@ -93,6 +97,9 @@ int main(int argc, char **argv)
 	if (!event)
 		event = EVENT_FILENAME;
 
+	if (!jevent)
+		jevent = JEVENT_FILENAME;
+
 	if (!uinput)
 		uinput = UINPUT_FILENAME;
 
@@ -109,7 +116,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Unable to init volume backend\n");
 #endif
 
-	if (do_listen(event, uinput))
+	if (do_listen(event, jevent, uinput))
 		exitcode = EXIT_FAILURE;
 	deinit();
 	return exitcode;

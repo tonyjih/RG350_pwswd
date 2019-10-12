@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <string.h>
 
 #include "event_listener.h"
 #include "shortcut_handler.h"
@@ -21,6 +22,27 @@
 #define POWEROFF_TIMEOUT 3
 #endif
 
+#define DEAD_ZONE		300
+#define AXIS_ZERO		1620
+
+#define JOYSTICK_MIN_X1		2000
+#define JOYSTICK_MIN_Y1		2000
+#define JOYSTICK_MIN_X2		900
+#define JOYSTICK_MIN_Y2		900
+
+#define JOYSTICK_MAX_X1		1300
+#define JOYSTICK_MAX_Y1		1300
+#define JOYSTICK_MAX_X2		2400
+#define JOYSTICK_MAX_Y2		2400
+#define JOYSTICK_NOISE_X1	4
+#define JOYSTICK_NOISE_Y1	4
+#define JOYSTICK_NOISE_X2	4
+#define JOYSTICK_NOISE_Y2	4
+#define JOYSTICK_FLAT_X1	200
+#define JOYSTICK_FLAT_Y1	200
+#define JOYSTICK_FLAT_X2	200
+#define JOYSTICK_FLAT_Y2	200
+
 #if (POWEROFF_TIMEOUT > 0)
 #include <pthread.h>
 #include <stdlib.h>
@@ -33,24 +55,28 @@ static struct uinput_user_dev uud = {
 };
 
 enum _mode {
-	NORMAL, MOUSE, HOLD
+	NORMAL, MOUSE, HOLD, DPAD
 };
 
 static enum _mode mode = NORMAL;
 
-static FILE *event0, *uinput;
+static FILE *event0, *jevent0, *uinput;
 static bool grabbed, power_button_pressed;
 
 static void switchmode(enum _mode new)
 {
+
 	if (new == mode) return;
 
 	switch(mode) {
 		case NORMAL:
 			switch(new) {
+				case DPAD:
 				case MOUSE:
 					// Enable non-blocking reads: we won't have to wait for an
 					// event to process mouse emulation.
+					if (ioctl(fileno(jevent0), EVIOCGRAB, true) == -1)
+						perror(__func__);
 					if (fcntl(fileno(event0), F_SETFL, O_NONBLOCK) == -1)
 						perror(__func__);
 					grabbed = true;
@@ -63,8 +89,11 @@ static void switchmode(enum _mode new)
 			}
 			mode = new;
 			break;
+		case DPAD:
 		case MOUSE:
 			// Disable non-blocking reads.
+			if (ioctl(fileno(jevent0), EVIOCGRAB, false) == -1)
+				perror(__func__);
 			if (fcntl(fileno(event0), F_SETFL, 0) == -1)
 				perror(__func__);
 		case HOLD:
@@ -138,10 +167,25 @@ static void execute(enum event_type event, int value)
 		case mouse:
 			if (value != 1) return;
 			str = "mouse";
-			if (mode == MOUSE)
+			if (mode == MOUSE) 
 				switchmode(NORMAL);
-			else
+			else if (mode == DPAD) {
+				switchmode(NORMAL);
 				switchmode(MOUSE);
+			}else
+				switchmode(MOUSE);
+			break;
+		case dpad:
+			if (value != 1) return;
+			str = "dpad";
+			if (mode == DPAD)
+				switchmode(NORMAL);
+			else if (mode == NORMAL)
+				switchmode(DPAD);
+			else if (mode == MOUSE) {
+				switchmode(NORMAL);
+				switchmode(DPAD);
+			}
 			break;
 #ifdef BACKEND_TVOUT
 		case tvout:
@@ -178,11 +222,17 @@ static void execute(enum event_type event, int value)
 }
 
 
-static int open_fds(const char *event0fn, const char *uinputfn)
+static int open_fds(const char *event0fn, const char *jeventfn, const char *uinputfn)
 {
 	event0 = fopen(event0fn, "r");
 	if (!event0) {
 		perror("opening event0");
+		return -1;
+	}
+
+	jevent0 = fopen(jeventfn, "r");
+	if (!jevent0) {
+		perror("opening jevent");
 		return -1;
 	}
 
@@ -195,6 +245,7 @@ static int open_fds(const char *event0fn, const char *uinputfn)
 	int fd = fileno(uinput);
 	write(fd, &uud, sizeof(uud));
 
+
 	if (ioctl(fd, UI_SET_EVBIT, EV_KEY) == -1) goto filter_fail;
 	if (ioctl(fd, UI_SET_KEYBIT, BTN_LEFT) == -1) goto filter_fail;
 	if (ioctl(fd, UI_SET_KEYBIT, BTN_MIDDLE) == -1) goto filter_fail;
@@ -202,11 +253,24 @@ static int open_fds(const char *event0fn, const char *uinputfn)
 
 	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_X) == -1) goto filter_fail;
 	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_Y) == -1) goto filter_fail;
-	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_L) == -1) goto filter_fail;
-	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_R) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_B) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_A) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_L1) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_R1) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_L2) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_R2) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_L3) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_R3) == -1) goto filter_fail;
 	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_START) == -1) goto filter_fail;
 	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_SELECT) == -1) goto filter_fail;
 	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_POWER) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_VOLUP) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, BUTTON_VOLDOWN) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, KEY_UP) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, KEY_DOWN) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, KEY_LEFT) == -1) goto filter_fail;
+	if (ioctl(fd, UI_SET_KEYBIT, KEY_RIGHT) == -1) goto filter_fail;
+
 
 	if (ioctl(fd, UI_SET_EVBIT, EV_REL) == -1) goto filter_fail;
 	if (ioctl(fd, UI_SET_RELBIT, REL_X) == -1) goto filter_fail;
@@ -293,9 +357,9 @@ bool power_button_is_pressed(void)
 	return power_button_pressed;
 }
 
-int do_listen(const char *event, const char *uinput)
+int do_listen(const char *event, const char *jevent, const char *uinput)
 {
-	if (open_fds(event, uinput))
+	if (open_fds(event, jevent, uinput))
 		return -1;
 
 	const struct shortcut *tmp;
@@ -332,16 +396,58 @@ int do_listen(const char *event, const char *uinput)
 #endif
 
 	bool combo_used = false;
+	bool last_dpad[4] = {false,false,false,false};
+	bool current_dpad[4] = {false,false,false,false};
+	short dpad_buttons[4] = {BUTTON_LEFT,BUTTON_RIGHT,BUTTON_UP,BUTTON_DOWN};
+	short mouse_x,mouse_y;
 
 	while(1) {
 		// We wait for an event.
 		// On mouse mode, this call does not block.
-		struct input_event my_event;
+		struct input_event my_event, my_jevent;
 		int read = fread(&my_event, sizeof(struct input_event), 1, event0);
+		int jread;
+		if (mode == DPAD || mode == MOUSE) {
+ 			jread = fread(&my_jevent, sizeof(struct input_event), 1, jevent0);
+		}
 
 		// If we are on "mouse" mode and nothing has been read, let's wait for a bit.
-		if (mode == MOUSE && !read)
+		// If we are on "dpad" mode and nothing has been read, let's wait for a bit.
+		if ( (mode == MOUSE || mode == DPAD) && !read && !jread)
 			usleep(10000);
+
+		if (mode == DPAD && jread && ! power_button_pressed) {
+			if (jread && !power_button_pressed && my_jevent.type == EV_ABS) {
+				switch(my_jevent.code) {
+					case 0:
+						current_dpad[0] = my_jevent.value < AXIS_ZERO - DEAD_ZONE;
+						current_dpad[1] = my_jevent.value > AXIS_ZERO + DEAD_ZONE;
+						break;
+					case 1:
+						current_dpad[2] = my_jevent.value < AXIS_ZERO - DEAD_ZONE;
+						current_dpad[3] = my_jevent.value > AXIS_ZERO + DEAD_ZONE;
+						break;
+					default:
+						break;
+				}
+				int i;
+				for (i = 0; i < 4; i ++) {
+					if(!last_dpad[i] && current_dpad[i]){
+						inject(EV_KEY, dpad_buttons[i] , 1);
+						inject(EV_SYN, SYN_REPORT, 0);
+					} else if(last_dpad[i] && !current_dpad[i]) {
+						inject(EV_KEY, dpad_buttons[i] , 0);
+						inject(EV_SYN, SYN_REPORT, 0);
+					}
+
+				}
+				memcpy(last_dpad, current_dpad, sizeof(last_dpad));
+			}
+			if(read) {
+				inject(EV_KEY, my_event.code, my_event.value);
+				inject(EV_SYN, SYN_REPORT, 0);
+			}
+		}
 
 		if (read) {
 			// If the power button is pressed, block inputs (if it wasn't already blocked)
@@ -465,7 +571,7 @@ int do_listen(const char *event, const char *uinput)
 				}
 
 				switch(my_event.code) {
-					case BUTTON_A:
+					case BUTTON_L1:
 						if (my_event.value == 2) /* Disable repeat on mouse buttons */
 							continue;
 
@@ -473,7 +579,7 @@ int do_listen(const char *event, const char *uinput)
 						inject(EV_SYN, SYN_REPORT, 0);
 						continue;
 
-					case BUTTON_B:
+					case BUTTON_R1:
 						if (my_event.value == 2) /* Disable repeat on mouse buttons */
 							continue;
 
@@ -481,15 +587,24 @@ int do_listen(const char *event, const char *uinput)
 						inject(EV_SYN, SYN_REPORT, 0);
 						continue;
 
+					case BUTTON_UP:
+					case BUTTON_DOWN:
+					case BUTTON_LEFT:
+					case BUTTON_RIGHT:
 					case BUTTON_X:
 					case BUTTON_Y:
-					case BUTTON_L:
-					case BUTTON_R:
+					case BUTTON_A:
+					case BUTTON_B:
+					case BUTTON_L2:
+					case BUTTON_R2:
+					case BUTTON_L3:
+					case BUTTON_R3:
 					case BUTTON_START:
 					case BUTTON_SELECT:
 
 						// If the event is not mouse-related, we reinject it.
 						inject(EV_KEY, my_event.code, my_event.value);
+						inject(EV_SYN, SYN_REPORT, 0);
 						continue;
 
 					default:
@@ -497,43 +612,45 @@ int do_listen(const char *event, const char *uinput)
 				}
 			}
 
-			// No event this time
-			else {
+			// 
+			if(jread && my_jevent.value != 0) {
 				// For each direction of the D-pad, we check the state of the corresponding button.
 				// If it is pressed, we inject an event with the corresponding mouse movement.
-				unsigned int i;
-				for (i = 0; i < nb_buttons; i++) {
-					unsigned short code;
-					int value;
 
-					if (!buttons[i].state)
-						continue;
 
-					switch(buttons[i].id) {
-						case BUTTON_LEFT:
-							code = REL_X;
-							value = -5;
-							break;
-						case BUTTON_RIGHT:
-							code = REL_X;
-							value = 5;
-							break;
-						case BUTTON_DOWN:
-							code = REL_Y;
-							value = 5;
-							break;
-						case BUTTON_UP:
-							code = REL_Y;
-							value = -5;
-							break;
-						default:
-							continue;
+				
+				switch(my_jevent.code) {
+                                        case 3: {
+                                                if(my_jevent.value < AXIS_ZERO - DEAD_ZONE) {
+							mouse_x = 0-1; 
+						} else if (my_jevent.value > AXIS_ZERO + DEAD_ZONE) {
+							mouse_x = 1;
+						} else {
+							mouse_x = 0;
+						}
+                                                break;
+					}
+                                        case 4: {
+                                                if(my_jevent.value < AXIS_ZERO - DEAD_ZONE) {
+							mouse_y = 0-1; 
+						} else if (my_jevent.value > AXIS_ZERO + DEAD_ZONE) {
+							mouse_y = 1;
+						} else {
+							mouse_y = 0;
+						}
+                                                break;
+                                        default:
+                                                break;
 					}
 
-					inject(EV_REL, code, value);
-					inject(EV_SYN, SYN_REPORT, 0);
 				}
+
 			}
+			if (mouse_y != 0)
+				inject(EV_REL, REL_Y, mouse_y);
+			if (mouse_x != 0)
+				inject(EV_REL, REL_X, mouse_x);
+			inject(EV_SYN, SYN_REPORT, 0); 
 		}
 	}
 
