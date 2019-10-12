@@ -29,6 +29,8 @@ struct button buttons[] = {
 	_BUTTON(HOLD),
 	_BUTTON(VOLUP),
 	_BUTTON(VOLDOWN),
+	_BUTTON(L3),
+	_BUTTON(R3),
 	
 };
 
@@ -51,6 +53,7 @@ static struct {
 	  { screenshot,	"SCREENSHOT", },
 	  { kill,		"KILL", },
 	  { ratiomode,          "RATIOMODE", },
+	  { dpad,          "DPAD", },
 };
 
 static void shortcut_free(struct shortcut *scuts)
