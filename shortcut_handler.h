@@ -37,7 +37,7 @@ enum event_type {
 	volup, voldown,
 	brightup, brightdown,
 	mouse, tvout, screenshot,
-	kill, ratiomode, dpad
+	kill, ratiomode, dpad, dpadmouse
 };
 
 struct button {

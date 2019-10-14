@@ -22,8 +22,12 @@
 #define POWEROFF_TIMEOUT 3
 #endif
 
-#define DEAD_ZONE		300
-#define AXIS_ZERO		1620
+#define DEAD_ZONE		250
+#define SLOW_MOUSE_ZONE		400
+#define AXIS_ZERO_0		1730
+#define AXIS_ZERO_1		1730
+#define AXIS_ZERO_3		1620
+#define AXIS_ZERO_4		1620
 
 #if (POWEROFF_TIMEOUT > 0)
 #include <pthread.h>
@@ -37,7 +41,7 @@ static struct uinput_user_dev uud = {
 };
 
 enum _mode {
-	NORMAL, MOUSE, HOLD, DPAD
+	NORMAL, MOUSE, HOLD, DPAD, DPADMOUSE
 };
 
 static enum _mode mode = NORMAL;
@@ -48,17 +52,20 @@ static bool grabbed, power_button_pressed;
 static void switchmode(enum _mode new)
 {
 
+	//fprintf(stderr, "Switch Mode OLD: %d NEW: %d\n",(int)mode,(int)new);
 	if (new == mode) return;
-
+	
 	switch(mode) {
 		case NORMAL:
 			switch(new) {
 				case DPAD:
 				case MOUSE:
-					// Enable non-blocking reads: we won't have to wait for an
-					// event to process mouse emulation.
+				case DPADMOUSE:
+					// enable read from joystick
 					if (ioctl(fileno(jevent0), EVIOCGRAB, true) == -1)
 						perror(__func__);
+					// Enable non-blocking reads: we won't have to wait for an
+					// event to process mouse emulation.
 					if (fcntl(fileno(event0), F_SETFL, O_NONBLOCK) == -1)
 						perror(__func__);
 					grabbed = true;
@@ -73,11 +80,23 @@ static void switchmode(enum _mode new)
 			break;
 		case DPAD:
 		case MOUSE:
-			// Disable non-blocking reads.
-			if (ioctl(fileno(jevent0), EVIOCGRAB, false) == -1)
-				perror(__func__);
-			if (fcntl(fileno(event0), F_SETFL, 0) == -1)
-				perror(__func__);
+		case DPADMOUSE:
+			switch(new) {
+				case NORMAL:
+					// disable read from joystick
+					if (ioctl(fileno(jevent0), EVIOCGRAB, false) == -1)
+						perror(__func__);
+					// Disable non-blocking reads.
+					if (fcntl(fileno(event0), F_SETFL, 0) == -1)
+						perror(__func__);
+					break;
+				case HOLD:
+					grabbed = true;
+					blank(1);
+					break;
+				default:
+					break;
+			}
 		case HOLD:
 			switch(new) {
 				case NORMAL:
@@ -151,10 +170,11 @@ static void execute(enum event_type event, int value)
 			str = "mouse";
 			if (mode == MOUSE) 
 				switchmode(NORMAL);
-			else if (mode == DPAD) {
-				switchmode(NORMAL);
-				switchmode(MOUSE);
-			}else
+			else if (mode == DPAD)
+				switchmode(DPADMOUSE);
+			else if (mode == DPADMOUSE)
+				switchmode(DPAD);
+			else
 				switchmode(MOUSE);
 			break;
 		case dpad:
@@ -162,12 +182,20 @@ static void execute(enum event_type event, int value)
 			str = "dpad";
 			if (mode == DPAD)
 				switchmode(NORMAL);
-			else if (mode == NORMAL)
+			else if (mode == MOUSE)
+				switchmode(DPADMOUSE);
+			else if (mode == DPADMOUSE)
+				switchmode(MOUSE);
+			else 
 				switchmode(DPAD);
-			else if (mode == MOUSE) {
+			break;
+		case dpadmouse:
+			if (value != 1) return;
+			str = "dpad";
+			if (mode == DPADMOUSE)
 				switchmode(NORMAL);
-				switchmode(DPAD);
-			}
+			else 
+				switchmode(DPADMOUSE);
 			break;
 #ifdef BACKEND_TVOUT
 		case tvout:
@@ -389,25 +417,26 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 		struct input_event my_event, my_jevent;
 		int read = fread(&my_event, sizeof(struct input_event), 1, event0);
 		int jread;
-		if (mode == DPAD || mode == MOUSE) {
+		if (mode == DPAD || mode == MOUSE || mode == DPADMOUSE) {
  			jread = fread(&my_jevent, sizeof(struct input_event), 1, jevent0);
 		}
 
 		// If we are on "mouse" mode and nothing has been read, let's wait for a bit.
 		// If we are on "dpad" mode and nothing has been read, let's wait for a bit.
-		if ( (mode == MOUSE || mode == DPAD) && !read && !jread)
-			usleep(10000);
+		if ( (mode == MOUSE || mode == DPAD || mode == DPADMOUSE) && !read && !jread)
+			usleep(10000); //1000000
 
-		if (mode == DPAD && jread && ! power_button_pressed) {
+		if ( ( mode == DPAD  || mode == DPADMOUSE ) && jread && ! power_button_pressed) {
 			if (jread && !power_button_pressed && my_jevent.type == EV_ABS) {
+				//fprintf(stderr, "code: %d value: %d\n",my_jevent.code,my_jevent.value);
 				switch(my_jevent.code) {
 					case 0:
-						current_dpad[0] = my_jevent.value < AXIS_ZERO - DEAD_ZONE;
-						current_dpad[1] = my_jevent.value > AXIS_ZERO + DEAD_ZONE;
+						current_dpad[0] = my_jevent.value > AXIS_ZERO_0 + DEAD_ZONE;
+						current_dpad[1] = my_jevent.value < AXIS_ZERO_0 - DEAD_ZONE;
 						break;
 					case 1:
-						current_dpad[2] = my_jevent.value < AXIS_ZERO - DEAD_ZONE;
-						current_dpad[3] = my_jevent.value > AXIS_ZERO + DEAD_ZONE;
+						current_dpad[2] = my_jevent.value > AXIS_ZERO_1 + DEAD_ZONE;
+						current_dpad[3] = my_jevent.value < AXIS_ZERO_1 - DEAD_ZONE;
 						break;
 					default:
 						break;
@@ -425,9 +454,9 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 				}
 				memcpy(last_dpad, current_dpad, sizeof(last_dpad));
 			}
-			if(read) {
-				inject(EV_KEY, my_event.code, my_event.value);
-				inject(EV_SYN, SYN_REPORT, 0);
+			if(mode == DPAD && read) {
+					inject(EV_KEY, my_event.code, my_event.value);
+					inject(EV_SYN, SYN_REPORT, 0);
 			}
 		}
 
@@ -536,7 +565,7 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 		}
 
 		// In case we are in the "mouse" mode, handle mouse emulation.
-		if (mode == MOUSE) {
+		if (mode == MOUSE || mode == DPADMOUSE) {
 
 			// We don't want to move the mouse if the power button is pressed.
 			if (power_button_pressed)
@@ -553,7 +582,7 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 				}
 
 				switch(my_event.code) {
-					case BUTTON_L1:
+					case BUTTON_L2:
 						if (my_event.value == 2) /* Disable repeat on mouse buttons */
 							continue;
 
@@ -561,7 +590,7 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 						inject(EV_SYN, SYN_REPORT, 0);
 						continue;
 
-					case BUTTON_R1:
+					case BUTTON_R2:
 						if (my_event.value == 2) /* Disable repeat on mouse buttons */
 							continue;
 
@@ -577,8 +606,8 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 					case BUTTON_Y:
 					case BUTTON_A:
 					case BUTTON_B:
-					case BUTTON_L2:
-					case BUTTON_R2:
+					case BUTTON_L1:
+					case BUTTON_R1:
 					case BUTTON_L3:
 					case BUTTON_R3:
 					case BUTTON_START:
@@ -603,20 +632,32 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 				
 				switch(my_jevent.code) {
                                         case 3: {
-                                                if(my_jevent.value < AXIS_ZERO - DEAD_ZONE) {
-							mouse_x = 0-1; 
-						} else if (my_jevent.value > AXIS_ZERO + DEAD_ZONE) {
-							mouse_x = 1;
+                                                if(my_jevent.value < AXIS_ZERO_3 - DEAD_ZONE) {
+							if (my_jevent.value < AXIS_ZERO_3 - DEAD_ZONE - SLOW_MOUSE_ZONE)
+								mouse_x = 0-5; 
+							else
+								mouse_x = 0-1; 
+						} else if (my_jevent.value > AXIS_ZERO_3 + DEAD_ZONE) {
+							if (my_jevent.value > AXIS_ZERO_3 + DEAD_ZONE + SLOW_MOUSE_ZONE)
+								mouse_x = 5; 
+							else
+								mouse_x = 1; 
 						} else {
 							mouse_x = 0;
 						}
                                                 break;
 					}
                                         case 4: {
-                                                if(my_jevent.value < AXIS_ZERO - DEAD_ZONE) {
-							mouse_y = 0-1; 
-						} else if (my_jevent.value > AXIS_ZERO + DEAD_ZONE) {
-							mouse_y = 1;
+                                                if(my_jevent.value < AXIS_ZERO_4 - DEAD_ZONE) {
+							if (my_jevent.value < AXIS_ZERO_4 - DEAD_ZONE - SLOW_MOUSE_ZONE)
+								mouse_y = 0-5; 
+							else
+								mouse_y = 0-1; 
+						} else if (my_jevent.value > AXIS_ZERO_4 + DEAD_ZONE) {
+							if (my_jevent.value > AXIS_ZERO_4 + DEAD_ZONE + SLOW_MOUSE_ZONE)
+								mouse_y = 5; 
+							else
+								mouse_y = 1; 
 						} else {
 							mouse_y = 0;
 						}
