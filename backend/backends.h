@@ -38,6 +38,10 @@
 #include "ratiomode/ratiomode.h"
 #endif
 
+#ifdef BACKEND_SHARPNESS
+#include "sharpness/sharpness.h"
+#endif
+
 #define FRAMEBUFFER "/dev/fb0"
 
 #endif

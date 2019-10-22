@@ -25,6 +25,12 @@ ifdef BACKEND_BRIGHTNESS
 	CFLAGS += -DBACKEND_BRIGHTNESS
 endif
 
+ifdef BACKEND_SHARPNESS
+	OBJS += backend/sharpness/sharpness.o
+	CFLAGS += -DBACKEND_SHARPNESS
+endif
+
+
 ifdef BACKEND_POWEROFF
 	OBJS += backend/poweroff/poweroff.o
 	CFLAGS += -DBACKEND_POWEROFF
