@@ -36,6 +36,7 @@ enum event_type {
 	reboot, poweroff, suspend, hold,
 	volup, voldown,
 	brightup, brightdown,
+	sharpup, sharpdown,
 	mouse, tvout, screenshot,
 	kill, ratiomode, dpad, dpadmouse
 };

@@ -5,7 +5,7 @@ BACKEND_REBOOT := Y
 BACKEND_KILL := Y
 BACKEND_SCREENSHOT := Y
 BACKEND_RATIOMODE := Y
-
+BACKEND_SHARPNESS := Y
 # Current OpenDingux/GCW0 doesn't support suspend
 # or TV-out
 # BACKEND_SUSPEND := Y

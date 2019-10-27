@@ -48,6 +48,8 @@ static struct {
 	  { voldown,	"VOLUME_DOWN", },
 	  { brightup,	"BRIGHTNESS_UP", },
 	  { brightdown,	"BRIGHTNESS_DOWN", },
+	  { sharpup, "SHARPNESS_UP",},
+	  { sharpdown, "SHARPNESS_DOWN",},
 	  { mouse,		"MOUSE_EMULATION", },
 	  { tvout,		"TV_OUT", },
 	  { screenshot,	"SCREENSHOT", },

@@ -165,6 +165,17 @@ static void execute(enum event_type event, int value)
 			bright_down(value);
 			break;
 #endif
+#ifdef BACKEND_SHARPNESS
+		case sharpup:
+			str = "sharpup";
+			sharp_up(value);
+			break;
+		case sharpdown:
+			str = "sharpdown";
+			sharp_down(value);
+			break;
+#endif
+
 		case mouse:
 			if (value != 1) return;
 			str = "mouse";
