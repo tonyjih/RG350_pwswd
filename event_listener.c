@@ -423,8 +423,8 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 
 		// If we are on "mouse" mode and nothing has been read, let's wait for a bit.
 		// If we are on "dpad" mode and nothing has been read, let's wait for a bit.
-		if ( (mode == MOUSE || mode == DPAD || mode == DPADMOUSE) && !read && !jread)
-			usleep(10000); //1000000
+		if ( (mode == DPAD || mode == MOUSE || mode == DPADMOUSE) && !read && !jread)
+			usleep(10); //1000000
 
 		if ( ( mode == DPAD  || mode == DPADMOUSE ) && jread && ! power_button_pressed) {
 			if (jread && !power_button_pressed && my_jevent.type == EV_ABS) {
