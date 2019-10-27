@@ -22,8 +22,8 @@
 #define POWEROFF_TIMEOUT 3
 #endif
 
-#define DEAD_ZONE		250
-#define SLOW_MOUSE_ZONE		400
+#define DEAD_ZONE		450
+#define SLOW_MOUSE_ZONE		600
 #define AXIS_ZERO_0		1730
 #define AXIS_ZERO_1		1730
 #define AXIS_ZERO_3		1620
@@ -191,7 +191,7 @@ static void execute(enum event_type event, int value)
 			break;
 		case dpadmouse:
 			if (value != 1) return;
-			str = "dpad";
+			str = "dpadmouse";
 			if (mode == DPADMOUSE)
 				switchmode(NORMAL);
 			else 
