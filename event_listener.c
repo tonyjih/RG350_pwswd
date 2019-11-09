@@ -22,8 +22,8 @@
 #define POWEROFF_TIMEOUT 3
 #endif
 
-#define DEAD_ZONE		450
-#define SLOW_MOUSE_ZONE		600
+#define DEAD_ZONE		600
+#define SLOW_MOUSE_ZONE		550
 #define AXIS_ZERO_0		1730
 #define AXIS_ZERO_1		1730
 #define AXIS_ZERO_3		1620
@@ -431,11 +431,6 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 		if (mode == DPAD || mode == MOUSE || mode == DPADMOUSE) {
  			jread = fread(&my_jevent, sizeof(struct input_event), 1, jevent0);
 		}
-
-		// If we are on "mouse" mode and nothing has been read, let's wait for a bit.
-		// If we are on "dpad" mode and nothing has been read, let's wait for a bit.
-		if ( (mode == DPAD || mode == MOUSE || mode == DPADMOUSE) && !read && !jread)
-			usleep(10); //1000000
 
 		if ( ( mode == DPAD  || mode == DPADMOUSE ) && jread && ! power_button_pressed) {
 			if (jread && !power_button_pressed && my_jevent.type == EV_ABS) {
