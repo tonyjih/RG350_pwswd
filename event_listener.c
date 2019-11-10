@@ -432,6 +432,12 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
  			jread = fread(&my_jevent, sizeof(struct input_event), 1, jevent0);
 		}
 
+
+		// If we are on "mouse" mode and nothing has been read, let's wait for a bit.
+		// If we are on "dpad" mode and nothing has been read, let's wait for a bit.
+		if ( (mode == DPAD || mode == MOUSE || mode == DPADMOUSE) && !read && !jread)
+			usleep(1); //1000000
+
 		if ( ( mode == DPAD  || mode == DPADMOUSE ) && jread && ! power_button_pressed) {
 			if (jread && !power_button_pressed && my_jevent.type == EV_ABS) {
 				//fprintf(stderr, "code: %d value: %d\n",my_jevent.code,my_jevent.value);
