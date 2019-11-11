@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
+#include <sys/epoll.h>
 
 #include "event_listener.h"
 #include "shortcut_handler.h"
@@ -46,8 +47,9 @@ enum _mode {
 
 static enum _mode mode = NORMAL;
 
-static FILE *event0, *jevent0, *uinput;
+static int event0 = -1, jevent0 = -1, uinput = -1;
 static bool grabbed, power_button_pressed;
+static int epollfd = -1;
 
 static void switchmode(enum _mode new)
 {
@@ -62,11 +64,13 @@ static void switchmode(enum _mode new)
 				case MOUSE:
 				case DPADMOUSE:
 					// enable read from joystick
-					if (ioctl(fileno(jevent0), EVIOCGRAB, true) == -1)
-						perror(__func__);
-					// Enable non-blocking reads: we won't have to wait for an
-					// event to process mouse emulation.
-					if (fcntl(fileno(event0), F_SETFL, O_NONBLOCK) == -1)
+					{
+						struct epoll_event ev;
+						ev.events = EPOLLIN;
+						ev.data.fd = jevent0;
+						epoll_ctl(epollfd, EPOLL_CTL_ADD, jevent0, &ev);
+					}
+					if (ioctl(jevent0, EVIOCGRAB, true) == -1)
 						perror(__func__);
 					grabbed = true;
 					break;
@@ -84,10 +88,8 @@ static void switchmode(enum _mode new)
 			switch(new) {
 				case NORMAL:
 					// disable read from joystick
-					if (ioctl(fileno(jevent0), EVIOCGRAB, false) == -1)
-						perror(__func__);
-					// Disable non-blocking reads.
-					if (fcntl(fileno(event0), F_SETFL, 0) == -1)
+					epoll_ctl(epollfd, EPOLL_CTL_DEL, jevent0, NULL);
+					if (ioctl(jevent0, EVIOCGRAB, false) == -1)
 						perror(__func__);
 					break;
 				case HOLD:
@@ -245,25 +247,25 @@ static void execute(enum event_type event, int value)
 
 static int open_fds(const char *event0fn, const char *jeventfn, const char *uinputfn)
 {
-	event0 = fopen(event0fn, "r");
-	if (!event0) {
+	event0 = open(event0fn, O_RDONLY | O_NONBLOCK);
+	if (event0 < 0) {
 		perror("opening event0");
 		return -1;
 	}
 
-	jevent0 = fopen(jeventfn, "r");
-	if (!jevent0) {
+	jevent0 = open(jeventfn, O_RDONLY | O_NONBLOCK);
+	if (jevent0 < 0) {
 		perror("opening jevent");
 		return -1;
 	}
 
-	uinput = fopen(uinputfn, "r+");
-	if (!uinput) {
+	uinput = open(uinputfn, O_RDWR);
+	if (uinput < 0) {
 		perror("opening uinput");
 		return -1;
 	}
 
-	int fd = fileno(uinput);
+	int fd = uinput;
 	write(fd, &uud, sizeof(uud));
 
 
@@ -305,6 +307,11 @@ static int open_fds(const char *event0fn, const char *jeventfn, const char *uinp
 		return -1;
 	}
 
+	struct epoll_event ev;
+	ev.events = EPOLLIN;
+	ev.data.fd = event0;
+	epoll_ctl(epollfd, EPOLL_CTL_ADD, event0, &ev);
+
 	return 0;
 
 filter_fail:
@@ -323,7 +330,7 @@ static int inject(unsigned short type, unsigned short code, int value)
 	inject_event.code = code;
 	inject_event.time.tv_sec = time(0);
 	inject_event.time.tv_usec = 0;
-	return write(fileno(uinput), &inject_event, sizeof(struct input_event));
+	return write(uinput, &inject_event, sizeof(struct input_event));
 }
 
 
@@ -380,8 +387,19 @@ bool power_button_is_pressed(void)
 
 int do_listen(const char *event, const char *jevent, const char *uinput)
 {
-	if (open_fds(event, jevent, uinput))
+#define MAX_EVENTS 2
+	struct epoll_event ev, events[MAX_EVENTS];
+	epollfd = epoll_create1(0);
+	if (epollfd == -1) {
+		perror("epoll_create1");
 		return -1;
+	}
+
+	if (open_fds(event, jevent, uinput)) {
+		close(epollfd);
+		epollfd = -1;
+		return -1;
+	}
 
 	const struct shortcut *tmp;
 	const struct shortcut *shortcuts = getShortcuts();
@@ -423,19 +441,15 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 	short mouse_x,mouse_y;
 
 	while(1) {
-		// We wait for an event.
-		// On mouse mode, this call does not block.
+		int nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
 		struct input_event my_event, my_jevent;
-		int read = fread(&my_event, sizeof(struct input_event), 1, event0);
-		int jread;
-		if (mode == DPAD || mode == MOUSE || mode == DPADMOUSE) {
- 			jread = fread(&my_jevent, sizeof(struct input_event), 1, jevent0);
+		int eread = 0, jread = 0, n;
+		for (n = 0; n < nfds; ++n) {
+			if (events[n].data.fd == event0)
+				eread = read(event0, &my_event, sizeof(struct input_event));
+			else
+				jread = read(jevent0, &my_jevent, sizeof(struct input_event));
 		}
-
-		// If we are on "mouse" mode and nothing has been read, let's wait for a bit.
-		// If we are on "dpad" mode and nothing has been read, let's wait for a bit.
-		if ( (mode == DPAD || mode == MOUSE || mode == DPADMOUSE) && !read && !jread)
-			usleep(10); //1000000
 
 		if ( ( mode == DPAD  || mode == DPADMOUSE ) && jread && ! power_button_pressed) {
 			if (jread && !power_button_pressed && my_jevent.type == EV_ABS) {
@@ -465,13 +479,13 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 				}
 				memcpy(last_dpad, current_dpad, sizeof(last_dpad));
 			}
-			if(mode == DPAD && read) {
+			if(mode == DPAD && eread) {
 					inject(EV_KEY, my_event.code, my_event.value);
 					inject(EV_SYN, SYN_REPORT, 0);
 			}
 		}
 
-		if (read) {
+		if (eread) {
 			// If the power button is pressed, block inputs (if it wasn't already blocked)
 			if (my_event.code == EVENT_SWITCH_POWER) {
 
@@ -525,7 +539,7 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 #endif
 
 				if (!grabbed) {
-					if (ioctl(fileno(event0), EVIOCGRAB, power_button_pressed)
+					if (ioctl(event0, EVIOCGRAB, power_button_pressed)
 							== -1)
 						perror(__func__);
 				}
@@ -583,7 +597,7 @@ int do_listen(const char *event, const char *jevent, const char *uinput)
 				continue;
 
 			// An event occured
-			if (read) {
+			if (eread) {
 				unsigned int i;
 
 				// Toggle the "value" flag of the button object
