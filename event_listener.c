@@ -158,11 +158,16 @@ static void execute(enum event_type event, int value)
 #ifdef BACKEND_BRIGHTNESS
 		case brightup:
 			str = "brightup";
+			blank(0);
 			bright_up(value);
 			break;
 		case brightdown:
 			str = "brightdown";
-			bright_down(value);
+			if (get_brightness() <= 1) {
+				blank(1);
+			} else {
+				bright_down(value);
+			}
 			break;
 #endif
 #ifdef BACKEND_SHARPNESS
