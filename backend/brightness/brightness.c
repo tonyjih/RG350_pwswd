@@ -39,7 +39,7 @@ static void dev_file_close(void)
 	}
 }
 
-static int get_brightness(void)
+int get_brightness(void)
 {
 	int val;
 	int num_read;

@@ -51,6 +51,18 @@ static int event0 = -1, jevent0 = -1, uinput = -1;
 static bool grabbed, power_button_pressed;
 static int epollfd = -1;
 
+static void enable_joystick(void)
+{
+	ioctl(fileno(jevent0), EVIOCGRAB, false);
+	fcntl(fileno(event0), F_SETFL, 0);
+}
+
+static void disable_joystick(void)
+{
+	ioctl(fileno(jevent0), EVIOCGRAB, true);
+	fcntl(fileno(event0), F_SETFL, O_NONBLOCK);
+}
+
 static void switchmode(enum _mode new)
 {
 
@@ -160,11 +172,18 @@ static void execute(enum event_type event, int value)
 #ifdef BACKEND_BRIGHTNESS
 		case brightup:
 			str = "brightup";
+			blank(0);
 			bright_up(value);
+			enable_joystick();
 			break;
 		case brightdown:
 			str = "brightdown";
-			bright_down(value);
+			if (get_brightness() <= 1) {
+				blank(1);
+				disable_joystick();
+			} else {
+				bright_down(value);
+			}
 			break;
 #endif
 #ifdef BACKEND_SHARPNESS
