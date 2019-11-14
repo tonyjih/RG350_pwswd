@@ -49,6 +49,18 @@ static enum _mode mode = NORMAL;
 static FILE *event0, *jevent0, *uinput;
 static bool grabbed, power_button_pressed;
 
+static void enable_joystick(void)
+{
+	ioctl(fileno(jevent0), EVIOCGRAB, false);
+	fcntl(fileno(event0), F_SETFL, 0);
+}
+
+static void disable_joystick(void)
+{
+	ioctl(fileno(jevent0), EVIOCGRAB, true);
+	fcntl(fileno(event0), F_SETFL, O_NONBLOCK);
+}
+
 static void switchmode(enum _mode new)
 {
 
@@ -160,11 +172,13 @@ static void execute(enum event_type event, int value)
 			str = "brightup";
 			blank(0);
 			bright_up(value);
+			enable_joystick();
 			break;
 		case brightdown:
 			str = "brightdown";
 			if (get_brightness() <= 1) {
 				blank(1);
+				disable_joystick();
 			} else {
 				bright_down(value);
 			}
