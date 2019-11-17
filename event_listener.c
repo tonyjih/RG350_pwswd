@@ -53,14 +53,12 @@ static int epollfd = -1;
 
 static void enable_joystick(void)
 {
-	ioctl(fileno(jevent0), EVIOCGRAB, false);
-	fcntl(fileno(event0), F_SETFL, 0);
+	ioctl(jevent0, EVIOCGRAB, false);
 }
 
 static void disable_joystick(void)
 {
-	ioctl(fileno(jevent0), EVIOCGRAB, true);
-	fcntl(fileno(event0), F_SETFL, O_NONBLOCK);
+	ioctl(jevent0, EVIOCGRAB, true);
 }
 
 static void switchmode(enum _mode new)
