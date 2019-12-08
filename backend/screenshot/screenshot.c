@@ -32,6 +32,18 @@ static inline unsigned int getNumber(void)
 }
 
 
+static inline uint24_t rgb15_to_24(uint16_t px)
+{
+	uint24_t pixel;
+
+	pixel.r = (px & 0x1f)   << 3;
+	pixel.g = (px & 0x3e0)  >> 2;
+	pixel.b = (px & 0x7c00) >> 7;
+
+	return pixel;
+}
+
+
 static inline uint24_t rgb16_to_24(uint16_t px)
 {
 	uint24_t pixel;
@@ -59,7 +71,11 @@ static inline uint24_t rgb32_to_24(uint32_t px)
 static inline void convert_to_24(uint24_t *to, void *from,
 			unsigned int bpp, unsigned int len)
 {
-	if (bpp == 16) {
+	if (bpp == 15) {
+		uint16_t *ptr = from;
+		while (len--)
+			*to++ = rgb15_to_24(*ptr++);
+	} else if (bpp == 16) {
 		uint16_t *ptr = from;
 		while (len--)
 			*to++ = rgb16_to_24(*ptr++);
@@ -122,7 +138,7 @@ static void * screenshot_thd(void* p)
 		return NULL;
 	}
 
-	if (bpp != 16 && bpp != 32) {
+	if (bpp != 15 && bpp != 16 && bpp != 32) {
 		fprintf(stderr, "Unsupported pixel format.\n");
 		fclose(fbdev);
 		return NULL;
@@ -136,13 +152,13 @@ static void * screenshot_thd(void* p)
 	}
 
 	// Pointer to an area corresponding to the end of the "picture" buffer.
-	buffer = picture + (4 - (bpp >> 3)) * width * height;
+	buffer = picture + (4 - ((bpp + 7) >> 3)) * width * height;
 
 	if (offset)
 		fseek(fbdev, offset, SEEK_SET);
 
 	// Read the framebuffer data.
-	read(fileno(fbdev), buffer, (bpp >> 3) * width * height);
+	read(fileno(fbdev), buffer, ((bpp + 7) >> 3) * width * height);
 	fclose(fbdev);
 
 	// The framebuffer has been read, now we can fall back to a lower priority.
